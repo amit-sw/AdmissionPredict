@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreML
 
 import Alamofire
 import SwiftyJSON
@@ -15,6 +16,11 @@ import SwiftyJSON
 
 struct ContentView: View {
     @State var prediction: String = "I don't know yet"
+    
+    var aiSource=["Local","Server"]
+    @State var selectedAISource=1
+    @State var localAIsource = true
+    
     @State var params: Parameters = [:]
     @State var greScore: Float = 315
     @State var toeflScore: Float = 106
@@ -43,6 +49,25 @@ struct ContentView: View {
     var body: some View {
         NavigationView {
             Form {
+                
+                Section {
+                    /*
+                    Picker(selection: $selectedAISource, label: Text("AI")) {
+                        ForEach(0 ..< aiSource.count) {
+                            Text(self.aiSource[$0])
+                        }
+                    }.onChange(of: selectedAISource, perform: { value in
+                        predictAI()
+                    })
+                    */
+                    
+                    Toggle(isOn: $localAIsource) {
+                          Text("On-device ML model")
+                    }.onChange(of: localAIsource, perform: { value in
+                        predictAI()
+                    })
+
+                }
                 
                 Section(header: Text("Inputs")) {
                     /*
@@ -79,7 +104,7 @@ struct ContentView: View {
                             Image(systemName: "plus")
                         }.foregroundColor(Color.green)
                     Text("GRE Score: \(greScore, specifier: "%.0f")")
-                    }.padding()
+                    }
                     }
                     HStack {
                     VStack {
@@ -91,7 +116,7 @@ struct ContentView: View {
                             Image(systemName: "plus")
                         }.foregroundColor(Color.green)
                     Text("TOEFL Score: \(toeflScore, specifier: "%.0f")")
-                    }.padding()
+                    }
                     }
                     HStack {
                     VStack {
@@ -103,7 +128,7 @@ struct ContentView: View {
                             Image(systemName: "plus")
                         }.foregroundColor(Color.green)
                     Text("CGPA: \(cgpaValue, specifier: "%.2f")")
-                    }.padding()
+                    }
                     }
                     Stepper(value: $universityRating,
                             in: 1...5,
@@ -138,13 +163,20 @@ struct ContentView: View {
                 
                 
                 Section {
+                    HStack {
+                        Text("Prediction:").font(.largeTitle)
+                    
+                    /*
                     Button(action: {
                         self.predictAI()
                     }) {
                         Text("Predict")
                             .font(.title)
                     }
+ */
+                    Spacer()
                     Text(prediction)
+                }
                 }
             }
             .navigationBarTitle(Text("Admit or No Admit"),displayMode: .inline)
@@ -152,6 +184,50 @@ struct ContentView: View {
     }
     
     func predictAI() {
+        /*
+        if(selectedAISource==1) {
+        predictAIServer()
+        } else {
+            predictAILocal()
+        }
+        */
+        
+        if(localAIsource) {
+            predictAILocal()
+        } else {
+            predictAIServer()
+        }
+    }
+    
+    func predictAILocal() {
+        do {
+        let model = try MyTabularRegressorV001_1(configuration: MLModelConfiguration())
+        let g=Double(greScore)
+        let t=Double(toeflScore)
+        let u=Double(universityRating)
+        let s=Double(sopValue)
+        let l=Double(lorValue)
+        let c=Double(cgpaValue)
+        let r=Double(researchValue)
+        guard let modelOutput = try? model.prediction(GRE_Score: g, TOEFL_Score: t, University_Rating: u, SOP: s, LOR: l, CGPA: c, Research: r) else {
+            print("Fatal error in local prediction")
+            prediction="Error"
+            return
+        }
+
+
+        print(modelOutput)
+        let prob = modelOutput.Chance_of_Admit
+        print("Model predicted prob:",prob)
+        let st = prob*100
+        prediction=String(format: "%.1f%%", st)
+        } catch {
+            print("Error in creating/calling local ML Model")
+        }
+        
+    }
+    
+    func predictAIServer() {
         print("Just got the call to PredictAI()")
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         
@@ -189,7 +265,7 @@ struct ContentView: View {
                 let predictedLabel = json["predicted_label"].stringValue
                 //debugPrint("Predicted label equals",predictedLabel)
                 let s = (Float(predictedLabel) ?? -0.01)*100
-                self.prediction=String(format: "Admit probability: %.1f%%", s)
+                self.prediction=String(format: "%.1f%%", s)
             case .failure(let error):
                 print("\n\n Request failed with error: \(error)")
             }
@@ -197,6 +273,7 @@ struct ContentView: View {
     }
     
     init() {
+        
         // UI look-and-feel
         UINavigationBar.appearance().backgroundColor = .yellow
         /*
